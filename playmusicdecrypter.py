@@ -28,6 +28,7 @@ import superadb
 
 class PlayMusicDecrypter:
     """Decrypt MP3 file from Google Play Music offline storage (All Access)"""
+    isencrypted = 1
     def __init__(self, database, infile):
         # Open source file
         self.infile = infile
@@ -36,7 +37,10 @@ class PlayMusicDecrypter:
         # Test if source file is encrypted
         start_bytes = self.source.read(4)
         if start_bytes != "\x12\xd3\x15\x27":
-            raise ValueError("Invalid file format!")
+            if start_bytes[0:2] == "\xff\xfb": # MP3
+                self.isencrypted = 0
+            else:
+                raise ValueError("Invalid file format!")
 
         # Get file info
         self.database = database
@@ -51,10 +55,12 @@ class PlayMusicDecrypter:
         iv = data[:16]
         encrypted = data[16:]
 
-        counter = Crypto.Util.Counter.new(64, prefix=iv[:8], initial_value=struct.unpack(">Q", iv[8:])[0])
-        cipher = Crypto.Cipher.AES.new(self.info["CpData"], Crypto.Cipher.AES.MODE_CTR, counter=counter)
-
-        return cipher.decrypt(encrypted)
+        if self.isencrypted:
+            counter = Crypto.Util.Counter.new(64, prefix=iv[:8], initial_value=struct.unpack(">Q", iv[8:])[0])
+            cipher = Crypto.Cipher.AES.new(self.info["CpData"], Crypto.Cipher.AES.MODE_CTR, counter=counter)
+            return cipher.decrypt(encrypted)
+        else:
+            return data
 
     def decrypt_all(self, outfile=""):
         """Decrypt all blocks and write them to outfile (or to stdout if outfile in not specified)"""
@@ -161,7 +167,7 @@ def pull_library(source_dir="/data/data/com.google.android.music/files/music", d
         sys.exit(1)
 
 
-def decrypt_files(source_dir="encrypted", destination_dir=".", database="music.db"):
+def decrypt_files(source_dir="encrypted", destination_dir=".", database="music.db", remove=0):
     """Decrypt all MP3 files in source directory and write them to destination directory"""
     print("Decrypting MP3 files...")
     if not os.path.isdir(destination_dir):
@@ -184,7 +190,8 @@ def decrypt_files(source_dir="encrypted", destination_dir=".", database="music.d
 
             decrypter.decrypt_all(outfile)
             decrypter.update_id3(outfile)
-            os.remove(f)
+            if remove:
+                os.remove(f)
         print("  Decryption finished ({:.1f}s)!".format(time.time() - start_time))
     else:
         print("  No files found! Exiting...")
@@ -198,6 +205,8 @@ def main():
                                    version="%prog {}".format(__version__))
     parser.add_option("-a", "--adb", default="adb",
                       help="path to adb executable")
+    parser.add_option("-e","--delete", default = False, action ="store_true",
+                      help="Erase files after processing")
     parser.add_option("-d", "--database",
                       help="local path to Google Play Music database file (will be downloaded from device via adb if not specified)")
     parser.add_option("-l", "--library",
@@ -222,7 +231,7 @@ def main():
         pull_library(options.remote, options.library, adb=options.adb)
 
     # Decrypt all MP3 files
-    decrypt_files(options.library, destination_dir, options.database)
+    decrypt_files(options.library, destination_dir, options.database, options.delete)
 
 
 if __name__ == "__main__":
