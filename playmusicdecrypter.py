@@ -18,7 +18,7 @@
 
 __version__ = "2.0"
 
-import os, sys, struct, re, glob, optparse, time
+import os, sys, struct, re, glob, time, argparse
 import Crypto.Cipher.AES, Crypto.Util.Counter
 import mutagen
 import sqlite3
@@ -200,39 +200,36 @@ def decrypt_files(source_dir="encrypted", destination_dir=".", database="music.d
 
 def main():
     # Parse command line options
-    parser = optparse.OptionParser(description="Decrypt MP3 files from Google Play Music offline storage (All Access)",
-                                   usage="usage: %prog [-h] [options] [destination_dir]",
-                                   version="%prog {}".format(__version__))
-    parser.add_option("-a", "--adb", default="adb",
-                      help="path to adb executable")
-    parser.add_option("-e","--delete", default = False, action ="store_true",
-                      help="Erase files after processing")
-    parser.add_option("-d", "--database",
-                      help="local path to Google Play Music database file (will be downloaded from device via adb if not specified)")
-    parser.add_option("-l", "--library",
-                      help="local path to directory with encrypted MP3 files (will be downloaded from device via adb if not specified")
-    parser.add_option("-r", "--remote", default="/data/data/com.google.android.music/files/music",
-                      help="remote path to directory with encrypted MP3 files on device (default: %default)")
-    (options, args) = parser.parse_args()
+    parser = argparse.ArgumentParser(description='Decrypt MP3 files from Google Play Music offline storage (All Access)',
+                                     usage='%(prog)s [-h] [options] [destination_dir]',
+                                     version='%(prog)s {}'.format(__version__))
+    parser.add_argument('-a', '--adb', default='adb',
+                        help='path to adb executable')
+    parser.add_argument('-e','--delete', default = False, action ='store_true',
+                        help='Erase files after processing')
+    parser.add_argument('-d', '--database',
+                        help='local path to Google Play Music database file (will be downloaded from device via adb if not specified)')
+    parser.add_argument('-l', '--library',
+                        help='local path to directory with encrypted MP3 files (will be downloaded from device via adb if not specified')
+    parser.add_argument('-r', '--remote', default='/data/data/com.google.android.music/files/music',
+                        help='remote path to directory with encrypted MP3 files on device (default: %(default)s)')
+    parser.add_argument('destination_dir', nargs='?', default='.')
+    args = parser.parse_args()
 
-    if len(args) < 1:
-        destination_dir = "."
-    else:
-        destination_dir = args[0]
+    destination_dir = args.destination_dir
 
     # Download Google Play Music database from device via adb
-    if not options.database:
-        options.database = os.path.join(destination_dir, "music.db")
-        pull_database(destination_dir, adb=options.adb)
+    if not args.database:
+        args.database = os.path.join(destination_dir, "music.db")
+        pull_database(destination_dir, adb=args.adb)
 
     # Download encrypted MP3 files from device via adb
-    if not options.library:
-        options.library = os.path.join(destination_dir, "encrypted")
-        pull_library(options.remote, options.library, adb=options.adb)
+    if not args.library:
+        args.library = os.path.join(destination_dir, "encrypted")
+        pull_library(args.remote, args.library, adb=args.adb)
 
     # Decrypt all MP3 files
-    decrypt_files(options.library, destination_dir, options.database, options.delete)
-
+    decrypt_files(args.library, destination_dir, args.database, args.delete)
 
 if __name__ == "__main__":
     main()
